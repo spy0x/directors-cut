@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { TYPES, REELS, ENDINGS, isFinish } from './story.js';
+import { TYPES, REELS, ENDINGS, INTRO, isFinish, START_TIME, MAX_CAM, NEED, SPLICE_BONUS, ERROR_PENALTY } from './story.js';
 
 /* =====================================================================
-   DIRECTOR'S CUT — prototype
-   You are in Reel 1. Zoom out, grab loose reels, splice them onto the
-   glowing gate at the end of your reel. The first/last "frame" of each
-   reel must match (open door -> open door, etc.) or it's a continuity error.
+   EL ÚLTIMO CARRETE — Santiago de Chile, 2030
+   Dan revive sus recuerdos como carretes sueltos. Aleja el zoom, agarra un
+   carrete y empálmalo en la puerta brillante: el final de un carrete debe
+   coincidir con el comienzo del siguiente. Hay un reloj, perseguidores que
+   amenazan la cámara de Dan, y decisiones que determinan si la obra se publica.
    ===================================================================== */
 
 // ---------- tuning ----------
@@ -150,7 +151,7 @@ function paintReel(def, index) {
     }
   }
   g.fillStyle = '#b8782a'; g.font = `${0.38 * s}px "Courier New", monospace`; g.textAlign = 'left';
-  const stamp = `▸ DIRECTOR'S CUT  ${String(index + 1).padStart(2, '0')}A  ▸  `;
+  const stamp = `▸ EL ÚLTIMO CARRETE  ${String(index + 1).padStart(2, '0')}A  ▸  `;
   g.fillText(stamp.repeat(4), 0.4 * s, 1.85 * s);
   g.fillText(stamp.repeat(4), 0.4 * s, c.height - 1.5 * s);
 
@@ -187,7 +188,7 @@ function paintReel(def, index) {
   g.font = `bold ${8 * s}px "Courier New", monospace`;
   g.fillText(String(index + 1), c.width / 2, iy + ih / 2 + 2.8 * s);
   g.fillStyle = 'rgba(255,255,255,.75)'; g.font = `bold ${0.8 * s}px "Courier New", monospace`;
-  g.fillText(`REEL ${index + 1} · ${def.name}`, c.width / 2, iy + 1.3 * s);
+  g.fillText(`CARRETE ${index + 1} · ${def.name}`, c.width / 2, iy + 1.3 * s);
 
   // badges
   const badge = (cx, type, caption) => {
@@ -204,8 +205,8 @@ function paintReel(def, index) {
     g.font = `bold ${0.55 * s}px "Courier New", monospace`;
     g.strokeText(caption, cx, cy - r - 0.4 * s); g.fillText(caption, cx, cy - r - 0.4 * s);
   };
-  badge(6.6 * s, def.start, 'STARTS WITH');
-  badge(c.width - 6.6 * s, def.end, 'ENDS WITH');
+  badge(6.6 * s, def.start, 'COMIENZA CON');
+  badge(c.width - 6.6 * s, def.end, 'TERMINA EN');
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -316,11 +317,36 @@ function makeNPC(def) {
   const g = new THREE.Group();
   const body = new THREE.Group(); g.add(body);
   const extra = def.ghost ? { transparent: true, opacity: 0.55, emissive: def.body, emissiveIntensity: 0.5 } : {};
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.7, 4, 10), mat(def.body, extra));
-  torso.position.y = 0.85;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 12), mat(def.ghost ? 0xdff3ff : 0xf1c9a0, extra));
-  head.position.y = 1.72;
-  body.add(torso, head);
+  let screen = null;
+  if (def.kind === 'tv') {
+    // televisor de tubo sobre un mueble, con la pantalla encendida
+    const stand = box(1.7, 0.7, 1.1, 0x5a3a22); stand.position.y = 0.35;
+    const set = box(1.6, 1.2, 1.0, 0x2a2a30); set.position.y = 1.3;
+    screen = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.85), new THREE.MeshBasicMaterial({ color: 0x9fd3ff }));
+    screen.position.set(-0.08, 1.3, 0.51);
+    const ant1 = box(0.04, 0.8, 0.04, 0x999999); ant1.position.set(-0.3, 2.3, 0); ant1.rotation.z = 0.5;
+    const ant2 = box(0.04, 0.8, 0.04, 0x999999); ant2.position.set(0.3, 2.3, 0); ant2.rotation.z = -0.5;
+    body.add(stand, set, screen, ant1, ant2);
+  } else if (def.kind === 'dog' || def.kind === 'cat') {
+    const dog = def.kind === 'dog', k = dog ? 1 : 0.7;
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5 * k, 0.45 * k, 1.0 * k), mat(def.body, extra)); torso.position.y = 0.55 * k + 0.1;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4 * k, 0.4 * k, 0.45 * k), mat(def.body, extra)); head.position.set(0, 0.85 * k + 0.1, 0.55 * k);
+    const earGeo = dog ? new THREE.BoxGeometry(0.1 * k, 0.3 * k, 0.12 * k) : new THREE.ConeGeometry(0.1 * k, 0.22 * k, 4);
+    for (const sx of [-1, 1]) {
+      const ear = new THREE.Mesh(earGeo, mat(dog ? 0x8a6a3c : def.body, extra)); ear.position.set(sx * 0.15 * k, (dog ? 0.9 : 1.15) * k + 0.1, 0.5 * k); body.add(ear);
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12 * k, 0.4 * k, 0.12 * k), mat(def.body, extra)); leg.position.set(sx * 0.16 * k, 0.2 * k + 0.1, 0.35 * k); body.add(leg);
+      const leg2 = leg.clone(); leg2.position.z = -0.35 * k; body.add(leg2);
+    }
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08 * k, 0.08 * k, 0.5 * k), mat(def.body, extra)); tail.position.set(0, 0.75 * k + 0.1, -0.7 * k); tail.rotation.x = -0.6;
+    body.add(torso, head, tail);
+  } else {
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.7, 4, 10), mat(def.body, extra));
+    torso.position.y = 0.85;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 12), mat(def.ghost ? 0xdff3ff : 0xf1c9a0, extra));
+    head.position.y = 1.72;
+    body.add(torso, head);
+    if (def.hair) { const h = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(def.hair)); h.position.y = 1.78; h.scale.y = 0.8; body.add(h); }
+  }
   const hc = def.hatColor ?? 0x222222;
   switch (def.hat) {
     case 'cap':    { const c = box(0.7, 0.18, 0.7, hc); c.position.y = 2.0; const b = box(0.5, 0.06, 0.4, hc); b.position.set(0, 1.94, 0.45); body.add(c, b); break; }
@@ -329,18 +355,18 @@ function makeNPC(def) {
     case 'beret':  { const b = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(hc)); b.scale.y = 0.55; b.position.set(0.06, 1.92, 0); body.add(b); break; }
     case 'hardhat':{ const b = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(hc)); b.position.y = 1.9; body.add(b); break; }
   }
-  const eyes = box(0.44, 0.08, 0.1, 0x111111); eyes.position.set(0, 1.76, 0.29); body.add(eyes);
+  if (!def.kind) { const eyes = box(0.44, 0.08, 0.1, 0x111111); eyes.position.set(0, 1.76, 0.29); body.add(eyes); }
   // bobbing "talk to me" marker
   const mark = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), new THREE.MeshBasicMaterial({ color: 0xffe066 }));
-  mark.position.y = 3.0; g.add(mark);
+  mark.position.y = def.markY ?? 3.0; g.add(mark);
   g.traverse(o => { if (o.isMesh && o !== mark) o.castShadow = !def.ghost; });
-  return { def, group: g, body, mark, count: 0, yaw: 0 };
+  return { def, group: g, body, mark, screen, markY: def.markY ?? 3.0, count: 0, yaw: 0 };
 }
 
 // ---------- painted backdrops standing behind each reel (the 2.5D "set") ----------
 const BACKDROP_H = 15;
-const BACKDROP_KIND = { open: 'studio', hall: 'hall', roof: 'city', chasm: 'canyon', deleted: 'void',
-  lobby: 'hall', pent: 'city', boiler: 'pipes', sewer: 'pipes', road: 'city', sky: 'canyon' };
+const BACKDROP_KIND = { sala: 'hall', plaza: 'plaza', roof: 'city', chasm: 'canyon', deleted: 'void',
+  lobby: 'hall', pent: 'city', boiler: 'pipes', sewer: 'pipes', road: 'city', sky: 'city' };
 
 function paintBackdrop(def) {
   const cw = 2048, ch = Math.round(2048 * BACKDROP_H / W);
@@ -363,6 +389,26 @@ function paintBackdrop(def) {
       for (let i = 0; i < 5; i++) cloud(rnd(100, cw - 100), rnd(ch * 0.1, ch * 0.4), rnd(70, 130));
       hills('#8a9fb5', ch * 0.62, 38, 0.004, 1); hills('#5f7a72', ch * 0.72, 46, 0.006, 3); hills('#3b5a3c', ch * 0.84, 40, 0.008, 5);
       for (let i = 0; i < 9; i++) pine(rnd(40, cw - 40), ch * 0.9, rnd(150, 260));
+      break;
+    }
+    case 'plaza': { // Plaza de Armas: cordillera, catedral y palmeras
+      sky('#7fb2e8', '#f3e6c8');
+      g.fillStyle = '#fff6d0'; g.beginPath(); g.arc(cw * 0.82, ch * 0.2, 70, 0, 7); g.fill();
+      for (let i = 0; i < 4; i++) cloud(rnd(100, cw - 100), rnd(ch * 0.08, ch * 0.3), rnd(60, 110));
+      hills('#aebfd6', ch * 0.5, 55, 0.003, 2);                       // Andes
+      g.fillStyle = 'rgba(255,255,255,.7)';                            // nieve
+      for (let x = 0; x < cw; x += 16) { const y = ch * 0.5 + Math.sin(x * 0.003 + 2) * 55 + Math.sin(x * 0.003 * 2.3 + 3.4) * 22; g.fillRect(x, y, 16, 10); }
+      g.fillStyle = '#c9b68f';                                         // catedral
+      g.fillRect(cw * 0.28, ch * 0.42, cw * 0.44, ch * 0.5);
+      for (const tx of [cw * 0.28, cw * 0.62]) { g.fillRect(tx, ch * 0.2, cw * 0.1, ch * 0.72); g.fillStyle = '#6b8a8a'; g.beginPath(); g.moveTo(tx - 6, ch * 0.2); g.lineTo(tx + cw * 0.05, ch * 0.08); g.lineTo(tx + cw * 0.1 + 6, ch * 0.2); g.fill(); g.fillStyle = '#c9b68f'; }
+      g.fillStyle = '#4a3a2a'; g.beginPath(); g.moveTo(cw * 0.45, ch * 0.92); g.lineTo(cw * 0.45, ch * 0.6); g.arc(cw * 0.5, ch * 0.6, cw * 0.05, Math.PI, 0); g.lineTo(cw * 0.55, ch * 0.92); g.fill();
+      g.fillStyle = '#7a6a4a'; g.fillRect(0, ch * 0.9, cw, ch * 0.1);
+      for (let i = 0; i < 5; i++) {                                    // palmeras
+        const x = rnd(40, cw - 40), h = rnd(260, 380);
+        g.strokeStyle = '#5a4a32'; g.lineWidth = 12; g.beginPath(); g.moveTo(x, ch * 0.95); g.quadraticCurveTo(x + 14, ch * 0.95 - h / 2, x, ch * 0.95 - h); g.stroke();
+        g.strokeStyle = '#2f6b3a'; g.lineWidth = 8;
+        for (let a = 0; a < 7; a++) { const ang = -Math.PI / 2 + (a - 3) * 0.5; g.beginPath(); g.moveTo(x, ch * 0.95 - h); g.quadraticCurveTo(x + Math.cos(ang) * 60, ch * 0.95 - h + Math.sin(ang) * 60 - 20, x + Math.cos(ang) * 110, ch * 0.95 - h + Math.sin(ang) * 80 + 30); g.stroke(); }
+      }
       break;
     }
     case 'city': {
@@ -459,27 +505,38 @@ REELS.forEach((def, i) => {
   gate.visible = false;
   group.add(startDeco, endDeco, gate);
 
-  let npc = null;
-  if (def.npc) {
-    npc = makeNPC(def.npc);
-    npc.group.position.set(def.npc.x, 0, def.npc.z);
+  const reelNpcs = [];
+  for (const nd of def.npcs ?? []) {
+    const npc = makeNPC(nd);
+    npc.group.position.set(nd.x, 0, nd.z);
     group.add(npc.group);
-    colliders.push({ x: def.npc.x, z: def.npc.z, hw: 0.5, hd: 0.5 });
-    npcs.push(npc);
+    const half = nd.kind === 'tv' ? 0.9 : nd.kind ? 0.5 : 0.5;
+    colliders.push({ x: nd.x, z: nd.z, hw: half, hd: nd.kind === 'tv' ? 0.6 : 0.5 });
+    npcs.push(npc); reelNpcs.push(npc);
+  }
+
+  // perseguidores: aparecen cuando entras a este carrete (si ya está empalmado hacia adelante)
+  let chaser = null;
+  if (def.chaser) {
+    const cm = makeNPC({ ...def.chaser, id: 'chaser-' + def.id });
+    cm.mark.visible = false; cm.group.visible = false;
+    cm.body.scale.setScalar(1.1);
+    group.add(cm.group);
+    chaser = { def: def.chaser, m: cm, x: 8, z: 0, active: false, invuln: 0 };
   }
 
   const [hx, , hz, hr = 0] = def.home;
   group.position.set(hx, 0, hz); group.rotation.y = hr;
 
   const reel = {
-    def, index: i, group, top, slab, backdrop, startDeco, endDeco, gate, colliders,
+    def, index: i, group, top, slab, backdrop, startDeco, endDeco, gate, colliders, chaser,
     state: i === 0 ? 'attached' : 'loose',        // loose | dragging | returning | attached
     slotX: hx,                                    // x position once attached
     target: new THREE.Vector3(hx, 0, hz), targetRot: hr,
     lastLoose: { x: hx, z: hz, rot: hr },
     hover: false, flash: 0, flashColor: new THREE.Color(), bobPhase: Math.random() * 6,
   };
-  if (npc) npc.reel = reel;
+  for (const n of reelNpcs) n.reel = reel;
   top.userData.reel = slab.userData.reel = reel;
   pickables.push(top, slab);
   reels.push(reel);
@@ -490,7 +547,11 @@ REELS.forEach((def, i) => {
 const state = {
   chain: [reels[0]],
   dragging: null, dragOffset: new THREE.Vector2(),
-  won: false, splices: 0, mistakes: 0, t0: performance.now(),
+  won: false,            // true cuando la historia terminó (final o derrota)
+  started: false,        // false mientras se muestra la introducción
+  splices: 0, mistakes: 0,
+  time: START_TIME, cam: MAX_CAM, valor: 0,
+  flags: new Set(), decided: new Set(),
 };
 reels[0].gate.visible = true;
 const tail = () => state.chain[state.chain.length - 1];
@@ -515,9 +576,16 @@ const body = new THREE.Group(); player.add(body);
   const beret = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x15151a));
   beret.scale.y = 0.55; beret.position.set(0.05, 1.9, 0);
   const shades = box(0.5, 0.1, 0.12, 0x000000); shades.position.set(0, 1.76, 0.28);
-  const mega = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 12, 1, true), mat(0xf5f0e0, { side: THREE.DoubleSide }));
-  mega.rotation.x = Math.PI / 2; mega.position.set(0.5, 1.1, 0.4);
-  body.add(torso, head, beret, shades, mega);
+  // la cámara de video de Dan, al hombro
+  const vcam = new THREE.Group();
+  const vbody = box(0.3, 0.32, 0.55, 0x1c1e22); vcam.add(vbody);
+  const vlens = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.25, 14), mat(0x0d0d10, { metalness: 0.7, roughness: 0.3 }));
+  vlens.rotation.x = Math.PI / 2; vlens.position.z = 0.4; vcam.add(vlens);
+  const vrec = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
+  vrec.position.set(0.1, 0.19, -0.15); vcam.add(vrec);
+  vcam.position.set(0.5, 1.35, 0.15);
+  body.add(torso, head, beret, shades, vcam);
+  player.userData.vcam = vcam; player.userData.vrec = vrec;
   body.traverse(o => { if (o.isMesh) o.castShadow = true; });
 }
 player.position.set(-6, 0, 0);
@@ -531,7 +599,9 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'r') location.reload();
   if (k === ' ') e.preventDefault();
-  if (!e.repeat && (k === 'e' || k === ' ' || k === 'enter')) interact();
+  if (!state.started) { if (!e.repeat && (k === 'enter' || k === ' ')) startGame(); return; }
+  if (!e.repeat && state.dialogue && k.length === 1 && '123'.includes(k)) pickChoice(+k - 1);
+  else if (!e.repeat && (k === 'e' || k === ' ' || k === 'enter')) interact();
   if (k === 'escape') closeDialogue();
   keys.add(k);
 });
@@ -541,6 +611,7 @@ addEventListener('blur', () => keys.clear());
 let zoomTarget = 0, zoom = 0;
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
+  if (!state.started) return;
   zoomTarget = clamp(zoomTarget + e.deltaY * 0.0009, 0, 1);
 }, { passive: false });
 
@@ -577,13 +648,13 @@ function toast(msg, cls = '', ms = 1700) {
 }
 
 canvas.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || state.won || state.dialogue) return;
+  if (e.button !== 0 || state.won || state.dialogue || !state.started) return;
   setMouse(e);
   const r = pickReel();
   if (!r) return;
   if (state.chain.includes(r)) {
-    if (r === state.chain[0] || r !== tail()) return toast('Already locked into the cut', '', 1200);
-    if (playerOn(r)) return toast("Can't pull a reel while you're in the shot!", 'bad');
+    if (r === state.chain[0] || r !== tail()) return toast('Ya está en el montaje', '', 1200);
+    if (playerOn(r)) return toast('¡No puedes retirar un carrete mientras estás en escena!', 'bad');
     // detach the tail so it can be swapped
     state.chain.pop();
     const t = tail(); t.endDeco.visible = true; t.gate.visible = !isFinish(t.def.end);
@@ -631,11 +702,11 @@ function drop() {
   const t = tail();
   if (!isFinish(t.def.end) && dragDistanceToGate(r) < SNAP_R) {
     if (r.def.start === t.def.end) return attach(r);
-    state.mistakes++;
-    return reject(r, 'CONTINUITY ERROR', `${TYPES[t.def.end].label} ≠ ${TYPES[r.def.start].label}`);
+    state.mistakes++; state.time = Math.max(1, state.time - ERROR_PENALTY); sfx('error');
+    return reject(r, 'ERROR DE CONTINUIDAD', `${TYPES[t.def.end].label} ≠ ${TYPES[r.def.start].label}   −${ERROR_PENALTY}s`);
   }
   const p = r.group.position;
-  if (reels.some(o => o !== r && overlaps(o.target.x, o.target.z, p.x, p.z))) return reject(r, 'NO ROOM THERE', 'reels cannot overlap', false);
+  if (reels.some(o => o !== r && overlaps(o.target.x, o.target.z, p.x, p.z))) return reject(r, 'SIN ESPACIO', 'los carretes no pueden superponerse', false);
   r.state = 'loose'; r.target.set(p.x, 0, p.z); r.targetRot = 0;
   r.lastLoose = { x: p.x, z: p.z, rot: 0 };
 }
@@ -646,10 +717,11 @@ function attach(r) {
   r.state = 'attached'; r.slotX = t.slotX + W;
   r.target.set(r.slotX, 0, 0); r.targetRot = 0;
   state.chain.push(r); state.splices++;
+  state.time += SPLICE_BONUS; sfx('splice');
   r.gate.visible = !isFinish(r.def.end);
   r.flash = 1; r.flashColor.set(0x33ff99);
   shake = 0.5;
-  toast('SEAMLESS CUT!', 'good');
+  toast(`¡CORTE PERFECTO!   +${SPLICE_BONUS}s`, 'good');
   updateObjective();
 }
 
@@ -667,10 +739,10 @@ const objSmall = document.querySelector('#objective .small');
 function updateObjective() {
   const t = tail();
   if (isFinish(t.def.end)) {
-    objSmall.textContent = 'THE CUT IS COMPLETE';
-    objText.textContent = `${TYPES[t.def.end].icon} Walk into the ${TYPES[t.def.end].label}`;
+    objSmall.textContent = 'EL MONTAJE ESTÁ LISTO · ATRÉVETE A CRUZAR';
+    objText.textContent = `${TYPES[t.def.end].icon} ${TYPES[t.def.end].label}`;
   } else {
-    objSmall.textContent = 'NEXT SCENE MUST BEGIN WITH';
+    objSmall.textContent = 'LA SIGUIENTE ESCENA DEBE EMPEZAR CON';
     objText.textContent = `${TYPES[t.def.end].icon} ${TYPES[t.def.end].label}`;
   }
 }
@@ -684,12 +756,17 @@ const dlgName = document.getElementById('dlgName');
 const dlgText = document.getElementById('dlgText');
 const promptEl = document.getElementById('prompt');
 
+const dlgChoices = document.getElementById('dlgChoices');
 const storyCtx = npc => ({
   count: npc ? npc.count : 0,
   n: state.chain.length,
+  valor: state.valor,
   has: id => state.chain.some(r => r.def.id === id),
   talked: id => state.talked.has(id),
+  decided: id => state.decided.has(id),
+  flag: f => state.flags.has(f),
 });
+const normLine = l => (typeof l === 'string' ? { say: l } : l);
 
 function playerWorldDist(npc) {
   const dx = player.position.x - (npc.reel.slotX + npc.def.x), dz = player.position.z - npc.def.z;
@@ -705,31 +782,78 @@ function nearestNPC() {
   return best;
 }
 
+const curLine = () => state.dialogue.lines[state.dialogue.i];
 function showLine() {
-  const d = state.dialogue;
-  d.full = d.lines[d.i]; d.shown = 0;
+  const d = state.dialogue, L = curLine();
+  d.full = L.say ?? L.ask; d.shown = 0;
   dlgText.textContent = '';
-  document.getElementById('dlgHint').textContent = d.i === d.lines.length - 1 ? '[E] close' : '[E] continue';
+  dlgChoices.innerHTML = '';
+  dlgName.textContent = L.who ?? d.npc.def.name;
+  if (L.sfx) sfx(L.sfx);
+  setHint();
+}
+function setHint() {
+  const d = state.dialogue, L = curLine();
+  const typed = d.shown >= d.full.length;
+  document.getElementById('dlgHint').textContent =
+    L.options ? (typed ? '[1-' + L.options.length + '] elegir' : '') : d.i === d.lines.length - 1 ? '[E] cerrar' : '[E] continuar';
+}
+function renderChoices() {
+  const L = curLine();
+  if (!L.options || dlgChoices.childElementCount) return;
+  L.options.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.textContent = `${i + 1}. ${o.t}`;
+    b.addEventListener('click', () => pickChoice(i));
+    dlgChoices.appendChild(b);
+  });
+  setHint();
+}
+function finishTyping() {
+  const d = state.dialogue;
+  d.shown = d.full.length; dlgText.textContent = d.full;
+  renderChoices(); setHint();
+}
+function pickChoice(i) {
+  const d = state.dialogue; if (!d) return;
+  const L = curLine();
+  if (!L.options || !dlgChoices.childElementCount || !L.options[i]) return;
+  const o = L.options[i];
+  if (L.id) state.decided.add(L.id);
+  (o.flags ?? []).forEach(f => state.flags.add(f));
+  if (o.v) {
+    state.valor = Math.max(0, state.valor + o.v);
+    toast(o.v > 0 ? 'Tu convicción crece' : 'Tu convicción flaquea', o.v > 0 ? 'good' : 'bad', 1500);
+    sfx(o.v > 0 ? 'good' : 'bad'); updateValor();
+  }
+  // las respuestas se insertan justo después de la pregunta
+  d.lines.splice(d.i + 1, 0, ...(o.reply ?? []).map(normLine));
+  dlgChoices.innerHTML = '';
+  advance();
+}
+function advance() {
+  const d = state.dialogue;
+  if (d.i < d.lines.length - 1) { d.i++; showLine(); } else closeDialogue();
 }
 function openDialogue(npc) {
-  const lines = npc.def.lines(storyCtx(npc));
+  const lines = npc.def.lines(storyCtx(npc)).map(normLine);
   npc.count++; state.talked.add(npc.def.id);
   state.dialogue = { npc, lines, i: 0, full: '', shown: 0 };
-  dlgName.textContent = npc.def.name;
   dlgEl.classList.add('show');
   promptEl.classList.remove('show');
   showLine();
 }
 function closeDialogue() {
   if (!state.dialogue) return;
-  state.dialogue = null; dlgEl.classList.remove('show');
+  state.dialogue = null; dlgEl.classList.remove('show'); dlgChoices.innerHTML = '';
 }
 function interact() {
-  if (state.won) return;
+  if (state.won || !state.started) return;
   const d = state.dialogue;
   if (d) {
-    if (d.shown < d.full.length) { d.shown = d.full.length; dlgText.textContent = d.full; return; } // finish typing
-    if (d.i < d.lines.length - 1) { d.i++; showLine(); } else closeDialogue();
+    if (d.shown < d.full.length) return finishTyping();   // terminar de escribir
+    if (curLine().options) return;                        // hay que elegir con 1/2 o con el mouse
+    advance();
     return;
   }
   const npc = nearestNPC();
@@ -740,18 +864,21 @@ function updateDialogue(dt, time) {
   if (d && d.shown < d.full.length) {
     d.shown = Math.min(d.full.length, d.shown + dt * 55);
     dlgText.textContent = d.full.slice(0, Math.floor(d.shown));
+    if (d.shown >= d.full.length) finishTyping();
   }
   // prompt near an NPC
-  const near = !d && !state.won ? nearestNPC() : null;
+  const near = !d && !state.won && state.started ? nearestNPC() : null;
   promptEl.classList.toggle('show', !!near);
-  if (near) promptEl.textContent = `[E] Talk to ${near.def.name.split(',')[0]}`;
-  if (d && playerWorldDist(d.npc) > TALK_R + 3) closeDialogue(); // walked/zoomed away
+  if (near) promptEl.textContent = `[E] ${near.def.kind === 'tv' ? 'Reproducir cassette' : 'Hablar con ' + near.def.name.split(',')[0]}`;
+  if (d && playerWorldDist(d.npc) > TALK_R + 3) closeDialogue(); // te alejaste / zoom
 
   for (const npc of npcs) {
-    npc.mark.position.y = 3.0 + Math.sin(time * 3 + npc.def.x) * 0.15;
+    npc.mark.position.y = npc.markY + Math.sin(time * 3 + npc.def.x) * 0.15;
     npc.mark.rotation.y = time * 2;
     npc.mark.material.color.set(npc.count > 0 ? 0x8a8f99 : 0xffe066);
     if (npc.def.ghost) npc.body.position.y = 0.25 + Math.sin(time * 1.8) * 0.15;
+    if (npc.screen) npc.screen.material.color.setHSL(0.55, 0.5, 0.55 + Math.sin(time * 23) * 0.06 + (state.dialogue?.npc === npc ? 0.15 : 0));
+    if (npc.def.kind === 'tv') continue;
     // turn to face the player when close
     if (state.chain.includes(npc.reel) && playerWorldDist(npc) < 6) {
       const want = Math.atan2(player.position.x - (npc.reel.slotX + npc.def.x), player.position.z - npc.def.z);
@@ -762,10 +889,23 @@ function updateDialogue(dt, time) {
 }
 
 // ---------- player movement + collision ----------
+// empuja (x,z) —en coordenadas del mundo— fuera de los props de un carrete
+function pushOutOfProps(p, r, radius, offsetX = r.slotX) {
+  for (const c of r.colliders) {
+    const bx = c.x + offsetX;
+    const cx = clamp(p.x, bx - c.hw, bx + c.hw), cz = clamp(p.z, c.z - c.hd, c.z + c.hd);
+    const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 < radius * radius) {
+      if (d2 > 1e-8) { const d = Math.sqrt(d2); p.x = cx + dx / d * radius; p.z = cz + dz / d * radius; }
+      else p.z = c.z + Math.sign(p.z - c.z || 1) * (c.hd + radius);
+    }
+  }
+}
+
 function movePlayer(dt) {
   const p = player.position;
   let ix = 0, iz = 0;
-  if (!state.won && !state.dialogue) {
+  if (!state.won && !state.dialogue && state.started) {
     if (keys.has('w') || keys.has('arrowup')) iz -= 1;
     if (keys.has('s') || keys.has('arrowdown')) iz += 1;
     if (keys.has('a') || keys.has('arrowleft')) ix -= 1;
@@ -783,17 +923,7 @@ function movePlayer(dt) {
   p.x += vel.x * dt; p.z += vel.z * dt;
 
   // props of every reel that is part of the cut
-  for (let pass = 0; pass < 2; pass++) {
-    for (const r of state.chain) for (const c of r.colliders) {
-      const bx = c.x + r.slotX;
-      const cx = clamp(p.x, bx - c.hw, bx + c.hw), cz = clamp(p.z, c.z - c.hd, c.z + c.hd);
-      const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
-      if (d2 < PLAYER_R * PLAYER_R) {
-        if (d2 > 1e-8) { const d = Math.sqrt(d2); p.x = cx + dx / d * PLAYER_R; p.z = cz + dz / d * PLAYER_R; }
-        else p.z = c.z + Math.sign(p.z - c.z || 1) * (c.hd + PLAYER_R);
-      }
-    }
-  }
+  for (let pass = 0; pass < 2; pass++) for (const r of state.chain) pushOutOfProps(p, r, PLAYER_R);
   const minX = state.chain[0].slotX - W / 2 + 0.9;
   const maxX = tailEdge() - (isFinish(tail().def.end) ? 0.3 : 0.9);
   p.x = clamp(p.x, minX, maxX);
@@ -810,33 +940,163 @@ function movePlayer(dt) {
   body.position.y = Math.abs(Math.sin(performance.now() * 0.014)) * 0.1 * clamp(speed / PLAYER_SPEED, 0, 1);
 
   // win check
-  if (!state.won && isFinish(tail().def.end) && p.x > tailEdge() - 4) win();
+  if (!state.won && state.started && isFinish(tail().def.end) && p.x > tailEdge() - 4) reachEnd();
 }
 
-function win() {
+// al cruzar la puerta final, el desenlace depende de la ruta Y de las decisiones
+function reachEnd() {
+  const gate = tail().def.end;
+  if (gate === 'END_GOLD') finish(state.valor >= NEED ? 'PUBLICADA' : 'MIEDO');
+  else if (gate === 'END_NOIR') finish('SILENCIO');
+  else finish('VENDIDA');
+}
+
+function finish(key) {
+  if (state.won) return;
   state.won = true;
   closeDialogue(); promptEl.classList.remove('show');
-  const endType = tail().def.end, ending = ENDINGS[endType];
-  const secs = ((performance.now() - state.t0) / 1000).toFixed(1);
+  const ending = ENDINGS[key];
+  sfx(key === 'PUBLICADA' ? 'win' : 'lose');
 
-  // remember which endings the player has discovered (survives restarts)
+  // finales descubiertos (se recuerdan entre partidas)
   let found = [];
-  try { found = JSON.parse(localStorage.getItem('dc_endings') || '[]'); } catch { /* ignore */ }
-  if (!found.includes(endType)) found.push(endType);
-  try { localStorage.setItem('dc_endings', JSON.stringify(found)); } catch { /* ignore */ }
-  const totalEndings = Object.keys(ENDINGS).length;
+  try { found = JSON.parse(localStorage.getItem('dc_endings_v2') || '[]'); } catch { /* ignore */ }
+  if (!found.includes(key)) found.push(key);
+  try { localStorage.setItem('dc_endings_v2', JSON.stringify(found)); } catch { /* ignore */ }
 
+  const published = key === 'PUBLICADA';
+  document.getElementById('winKicker').textContent = published ? 'LA OBRA SE PUBLICÓ' : 'LA OBRA NO SE PUBLICÓ';
   const title = document.getElementById('winTitle');
-  title.textContent = ending.title; title.style.color = TYPES[endType].color;
+  title.textContent = ending.title; title.style.color = ending.color;
   document.getElementById('winText').textContent = ending.text(storyCtx(null));
-  document.getElementById('winRoute').textContent = 'YOUR CUT:  ' + state.chain.map(r => r.def.name).join('  →  ');
-  const unused = reels.filter(r => !state.chain.includes(r)).length;
+  document.getElementById('winRoute').textContent = 'TU MONTAJE:  ' + state.chain.map(r => r.def.name).join('  →  ');
   document.getElementById('winStats').textContent =
-    `Time ${secs}s · Reels left on the cutting-room floor: ${unused} · Continuity errors: ${state.mistakes} · Characters met: ${state.talked.size}`;
-  document.getElementById('winFound').textContent = `Endings discovered: ${found.length} / ${totalEndings}`;
+    `Tiempo restante ${fmtTime(state.time)} · Cámara ${state.cam}/${MAX_CAM} · Convicción ${state.valor} · Errores de continuidad ${state.mistakes} · Personajes con los que hablaste ${state.talked.size}`;
+  document.getElementById('winFound').textContent = `Finales descubiertos: ${found.length} / ${Object.keys(ENDINGS).length}`;
   document.getElementById('win').classList.add('show');
 }
 document.getElementById('again').addEventListener('click', () => location.reload());
+
+// ---------- sonido (sintetizado: cassette de baja fidelidad) ----------
+let actx = null;
+function audio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { /* sin audio */ } }
+  if (actx && actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function sfx(kind) {
+  const a = audio(); if (!a) return;
+  const now = a.currentTime;
+  const tone = (type, f0, f1, at, dur, vol, lp = 2400) => {
+    const o = a.createOscillator(), g = a.createGain(), f = a.createBiquadFilter();
+    o.type = type; f.type = 'lowpass'; f.frequency.value = lp;
+    o.frequency.setValueAtTime(f0, now + at); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), now + at + dur);
+    g.gain.setValueAtTime(0.0001, now + at);
+    g.gain.exponentialRampToValueAtTime(vol, now + at + Math.min(0.03, dur / 3));
+    g.gain.exponentialRampToValueAtTime(0.0001, now + at + dur);
+    o.connect(f); f.connect(g); g.connect(a.destination);
+    o.start(now + at); o.stop(now + at + dur + 0.05);
+  };
+  switch (kind) {
+    case 'bark':  tone('sawtooth', 520, 190, 0, 0.14, 0.2, 1500); tone('sawtooth', 500, 170, 0.24, 0.17, 0.2, 1500); break;
+    case 'meow':  tone('triangle', 520, 840, 0, 0.25, 0.2, 2800); tone('triangle', 840, 430, 0.25, 0.4, 0.2, 2400); break;
+    case 'laugh': for (let i = 0; i < 5; i++) tone('square', 430 - i * 22, 330 - i * 22, i * 0.15, 0.1, 0.06, 1100); break;
+    case 'splice': tone('square', 240, 120, 0, 0.07, 0.1, 1800); tone('square', 520, 760, 0.08, 0.1, 0.07, 2600); break;
+    case 'error': tone('sawtooth', 180, 90, 0, 0.3, 0.14, 900); break;
+    case 'hit':   tone('sawtooth', 120, 40, 0, 0.35, 0.3, 700); tone('square', 900, 200, 0, 0.12, 0.1, 1800); break;
+    case 'alarm': tone('square', 440, 440, 0, 0.14, 0.08, 1600); tone('square', 330, 330, 0.18, 0.14, 0.08, 1600); break;
+    case 'good':  tone('triangle', 440, 660, 0, 0.18, 0.12); break;
+    case 'bad':   tone('triangle', 330, 220, 0, 0.25, 0.12); break;
+    case 'win':   [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, i * 0.16, 0.5, 0.13)); break;
+    case 'lose':  [392, 330, 262, 196].forEach((f, i) => tone('triangle', f, f * 0.98, i * 0.28, 0.6, 0.12, 1200)); break;
+  }
+}
+
+// ---------- HUD: reloj, integridad de la cámara, convicción ----------
+const clockEl = document.getElementById('clockText');
+const camEl = document.getElementById('camText');
+const valorEl = document.getElementById('valorText');
+const fmtTime = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+let lastClockStr = '';
+function updateClockHud() {
+  const str = fmtTime(state.time);
+  if (str === lastClockStr) return;
+  lastClockStr = str; clockEl.textContent = str;
+  clockEl.classList.toggle('low', state.time < 60);
+}
+function updateCam() {
+  camEl.innerHTML = '📹'.repeat(state.cam) + `<span class="lost">${'📹'.repeat(MAX_CAM - state.cam)}</span>`;
+}
+function updateValor() {
+  const n = Math.min(6, state.valor);
+  valorEl.textContent = '●'.repeat(n) + '○'.repeat(6 - n);
+  valorEl.classList.toggle('ready', state.valor >= NEED);
+}
+updateClockHud(); updateCam(); updateValor();
+
+// ---------- introducción ----------
+const introEl = document.getElementById('intro');
+{
+  const wrap = document.getElementById("introText");
+  INTRO.forEach((t, i) => { const p = document.createElement('p'); p.textContent = t; p.className = i === 0 ? 'place' : ''; p.style.animationDelay = `${i * 0.9}s`; wrap.appendChild(p); });
+}
+function startGame() {
+  if (state.started) return;
+  state.started = true; audio();
+  introEl.classList.add('hide');
+}
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+function updateClock(dt) {
+  if (!state.started || state.won || state.dialogue) return;
+  state.time -= dt;
+  if (state.time <= 0) { state.time = 0; updateClockHud(); finish('TIEMPO'); return; }
+  updateClockHud();
+}
+
+// ---------- perseguidores ----------
+// Sólo te persiguen en carretes que ya tienen un siguiente carrete empalmado (o un final):
+// así la huida es una consecuencia de lo que planificaste, no una trampa sin salida.
+function updateChasers(dt, time) {
+  for (const r of reels) {
+    const ch = r.chaser; if (!ch) continue;
+    const idx = state.chain.indexOf(r);
+    const prepared = idx >= 0 && (idx < state.chain.length - 1 || isFinish(r.def.end));
+    const lx = player.position.x - r.slotX;
+    const inside = idx >= 0 && lx > -W / 2 + 1.5 && lx < W / 2 - 0.6;
+    const live = prepared && inside && state.started && !state.won;
+
+    if (live && !ch.active) {
+      ch.active = true; ch.x = 8; ch.z = player.position.z > 0 ? -3 : 3; ch.invuln = 1.2;
+      ch.m.group.visible = true;
+      toast(`¡TE PERSIGUEN!\n${ch.def.name}`, 'bad', 1900); sfx('alarm');
+    } else if (!live && ch.active) {
+      ch.active = false; ch.m.group.visible = false;
+    }
+    if (!ch.active) continue;
+    if (state.dialogue) continue;                       // pausa mientras hablas
+
+    ch.invuln = Math.max(0, ch.invuln - dt);
+    const dx = lx - ch.x, dz = player.position.z - ch.z, d = Math.hypot(dx, dz);
+    const sp = ch.def.speed * (state.flags.has('idfalso') ? 0.8 : 1);
+    if (d > 0.01) { ch.x += dx / d * sp * dt; ch.z += dz / d * sp * dt; }
+    const lp = { x: ch.x, z: ch.z };
+    for (let pass = 0; pass < 2; pass++) pushOutOfProps(lp, r, 0.55, 0);
+    ch.x = clamp(lp.x, -W / 2 + 0.8, W / 2 - 0.8); ch.z = clamp(lp.z, -(H / 2 - 0.7), H / 2 - 0.7);
+    ch.m.group.position.set(ch.x, 0, ch.z);
+    ch.m.body.rotation.y = Math.atan2(dx, dz);
+    ch.m.body.position.y = Math.abs(Math.sin(time * 11)) * 0.12;
+
+    if (ch.invuln <= 0 && d < 1.15) hitCamera(r, ch);
+  }
+}
+function hitCamera(r, ch) {
+  state.cam--; updateCam(); sfx('hit'); shake = 1.0;
+  if (state.cam <= 0) return finish('CAMARA');
+  toast(`¡TE ALCANZARON!\nLa cámara se golpea · ${state.cam}/${MAX_CAM}`, 'bad', 2200);
+  player.position.set(r.slotX - W / 2 + 2, 0, 0); vel.set(0, 0, 0);   // logras zafarte y retroceder
+  ch.x = 8; ch.z = 0; ch.invuln = 2.4;
+}
 
 // ---------- reels update ----------
 function updateReels(dt, time) {
@@ -951,8 +1211,11 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   movePlayer(dt);
+  updateClock(dt);
+  updateChasers(dt, now / 1000);
   updateReels(dt, now / 1000);
   updateDialogue(dt, now / 1000);
+  player.userData.vrec.visible = state.started && !state.won && Math.floor(now / 500) % 2 === 0;   // luz REC parpadeante
   updateCamera(dt);
   document.getElementById('zoomhint').style.opacity = zoomTarget > 0.15 ? 0 : 1;
   renderer.render(scene, camera);
@@ -961,4 +1224,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // debug handle for poking from the console
-window.__game = { state, reels, player, camera, THREE };
+window.__game = { state, reels, player, camera, THREE, attach, finish, startGame, sfx };
