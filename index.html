@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Director's Cut</title>
+  <style>
+    :root { --ink:#f4ead2; --dim:#a79f8a; --accent:#ffb347; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; overflow:hidden; background:#0b0b10; color:var(--ink);
+      font-family: "Courier New", ui-monospace, monospace; user-select:none; }
+    canvas#game { display:block; width:100vw; height:100vh; }
+    #vignette { position:fixed; inset:0; pointer-events:none;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.65) 100%); }
+    #grain { position:fixed; inset:-50%; pointer-events:none; opacity:.07; animation: grain .6s steps(6) infinite;
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+    @keyframes grain { 0%{transform:translate(0,0)} 20%{transform:translate(-3%,2%)} 40%{transform:translate(2%,-3%)}
+      60%{transform:translate(-2%,-1%)} 80%{transform:translate(3%,3%)} 100%{transform:translate(0,0)} }
+
+    /* 35mm film bands framing the view while you're "inside" a reel */
+    .film { position:fixed; left:0; right:0; height:46px; pointer-events:none; background-color:#090909;
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='86' height='46'><rect x='24' y='10' width='38' height='26' rx='7' fill='%23f4f1e8'/></svg>");
+      background-repeat:repeat-x; background-size:86px 46px; transition:none; }
+    .film::after { position:absolute; left:10px; font-size:10px; letter-spacing:.2em; color:#e8a23a; white-space:nowrap; opacity:.9; }
+    #filmTop { top:0; border-bottom:2px solid #000; }
+    #filmTop::after { content:"25  \25B8  24A  \25B8  DIRECTOR'S CUT  \25B8  25  \25B8  24A"; bottom:0; }
+    #filmBottom { bottom:0; border-top:2px solid #000; }
+    #filmBottom::after { content:"\25C2 24A  25  \25B8  KODAK-ISH 5063  \25B8  25A"; top:0; }
+
+    .hud { position:fixed; pointer-events:none; text-shadow:0 2px 6px #000; }
+    #title { top:60px; left:20px; }
+    #title h1 { margin:0; font-size:22px; letter-spacing:.25em; color:var(--accent); }
+    #title p { margin:2px 0 0; font-size:12px; color:var(--dim); letter-spacing:.1em; }
+    #objective { top:60px; left:50%; transform:translateX(-50%); text-align:center;
+      background:rgba(10,10,14,.72); border:1px solid #3a3a46; padding:8px 18px; border-radius:6px; }
+    #objective .small { font-size:11px; color:var(--dim); letter-spacing:.15em; }
+    #objective .big { font-size:18px; margin-top:2px; }
+    #help { bottom:58px; left:20px; font-size:12px; color:var(--dim); line-height:1.7; }
+    #help b { color:var(--ink); }
+    #zoomhint { bottom:58px; right:20px; font-size:12px; color:var(--dim); }
+    #toast { top:34%; left:50%; transform:translate(-50%,-50%); font-size:26px; letter-spacing:.12em; opacity:0;
+      transition: opacity .25s; text-align:center; }
+    #toast { white-space:pre-line; }
+    #toast.show { opacity:1; }
+    #toast.bad { color:#ff5d5d; } #toast.good { color:#6dffa8; }
+    #prompt { bottom:200px; left:50%; transform:translateX(-50%); font-size:16px; letter-spacing:.1em;
+      background:rgba(10,10,14,.8); border:1px solid var(--accent); color:var(--accent); padding:6px 16px; border-radius:6px;
+      opacity:0; transition:opacity .15s; }
+    #prompt.show { opacity:1; }
+    #dialog { position:fixed; left:50%; bottom:62px; transform:translateX(-50%) translateY(20px); width:min(760px, 92vw);
+      background:rgba(12,12,18,.94); border:2px solid var(--accent); border-radius:8px; padding:16px 22px 12px;
+      opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; box-shadow:0 8px 40px #000; }
+    #dialog.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #dlgName { color:var(--accent); font-size:14px; letter-spacing:.18em; margin-bottom:8px; text-transform:uppercase; }
+    #dlgText { font-size:19px; line-height:1.5; min-height:3em; }
+    #dlgHint { text-align:right; font-size:12px; color:var(--dim); margin-top:4px; animation:blink 1s steps(2) infinite; }
+    @keyframes blink { 50% { opacity:.3 } }
+    #win { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column;
+      background:rgba(0,0,0,.78); text-align:center; }
+    #win.show { display:flex; }
+    #win h2 { font-size:48px; letter-spacing:.25em; color:var(--accent); margin:6px 0 14px; }
+    #win { padding:0 20px; }
+    #win p { color:var(--dim); margin:4px 0; }
+    #win button { margin-top:22px; font:inherit; font-size:16px; letter-spacing:.2em; padding:10px 26px; cursor:pointer;
+      background:var(--accent); color:#111; border:0; border-radius:4px; }
+  </style>
+  <script type="module" crossorigin src="./assets/index-CNCV1T3n.js"></script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="filmTop" class="film"></div>
+  <div id="filmBottom" class="film"></div>
+  <div id="grain"></div>
+
+  <div id="title" class="hud"><h1>DIRECTOR'S CUT</h1><p>splice the reels. find the ending.</p></div>
+  <div id="objective" class="hud"><div class="small">NEXT SCENE MUST BEGIN WITH</div><div class="big" id="objText">-</div></div>
+  <div id="help" class="hud">
+    <b>WASD</b> move &nbsp; <b>MOUSE WHEEL</b> zoom out/in<br />
+    <b>DRAG</b> a loose reel onto the glowing gate &nbsp; <b>E</b> talk &nbsp; <b>R</b> restart
+  </div>
+  <div id="zoomhint" class="hud">Zoom out to see the other reels &#8594;</div>
+  <div id="toast" class="hud"></div>
+
+  <div id="prompt" class="hud"></div>
+  <div id="dialog">
+    <div id="dlgName"></div>
+    <div id="dlgText"></div>
+    <div id="dlgHint"></div>
+  </div>
+
+  <div id="win">
+    <div class="small" style="letter-spacing:.3em;color:var(--dim)">THAT'S A WRAP</div>
+    <h2 id="winTitle"></h2>
+    <p id="winText" style="max-width:640px;font-size:20px;color:var(--ink);line-height:1.5"></p>
+    <p id="winRoute" style="max-width:820px;font-size:13px;margin-top:18px"></p>
+    <p id="winStats" style="font-size:13px"></p>
+    <p id="winFound" style="color:var(--accent)"></p>
+    <button id="again">TRY ANOTHER CUT</button>
+  </div>
+
+</body>
+</html>
